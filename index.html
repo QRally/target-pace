@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ghost Pace v1.1</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #121212;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        #delta-display {
+            font-size: 8rem;
+            font-weight: bold;
+            font-variant-numeric: tabular-nums;
+            margin: 10px 0;
+        }
+
+        .status-label {
+            font-size: 1.1rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #888;
+        }
+
+        #stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            text-align: center;
+            width: 90%;
+            max-width: 400px;
+            margin-top: 20px;
+        }
+
+        .stat-box {
+            background: #1e1e1e;
+            padding: 12px;
+            border-radius: 10px;
+        }
+
+        .stat-value {
+            display: block;
+            font-size: 1.4rem;
+            font-weight: bold;
+        }
+
+        .controls {
+            margin-top: 30px;
+            text-align: center;
+        }
+
+        input[type="number"] {
+            background: #222;
+            border: 2px solid #444;
+            color: white;
+            font-size: 1.5rem;
+            padding: 10px;
+            border-radius: 8px;
+            width: 80px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 20px 50px;
+            font-size: 1.3rem;
+            border-radius: 50px;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            display: block;
+            margin: 0 auto;
+        }
+
+        #start-btn { background-color: #4CAF50; color: white; }
+        #stop-btn { background-color: #f44336; color: white; display: none; }
+        
+        .on-pace { color: #4CAF50; }
+        .too-fast { color: #f44336; } 
+        .too-slow { color: #2196F3; } 
+    </style>
+</head>
+<body>
+
+    <div class="status-label" id="status-text">Set Target Pace</div>
+    
+    <div class="controls" id="input-area">
+        <input type="number" id="speed-input" value="30" step="1">
+        <span style="font-size: 1.2rem; margin-left: 10px;">MPH</span>
+    </div>
+
+    <div id="delta-display">0.0</div>
+    <div class="status-label">Seconds Delta</div>
+
+    <div id="stats">
+        <div class="stat-box">
+            <span class="status-label">Live Speed</span>
+            <span id="current-speed" class="stat-value">0.0 mph</span>
+        </div>
+        <div class="stat-box">
+            <span class="status-label">Trip Dist</span>
+            <span id="total-dist" class="stat-value">0.00 mi</span>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button id="start-btn" onclick="startTracking()">START TRACKING</button>
+        <button id="stop-btn" onclick="stopTracking()">RESET</button>
+    </div>
+
+    <script>
+        let watchID = null;
+        let startTime = null;
+        let totalDistanceMiles = 0;
+        let lastCoords = null;
+        let targetMPH = 30;
+
+        const deltaEl = document.getElementById('delta-display');
+        const speedEl = document.getElementById('current-speed');
+        const distEl = document.getElementById('total-dist');
+        const statusEl = document.getElementById('status-text');
+        const inputArea = document.getElementById('input-area');
+
+        function startTracking() {
+            if (!navigator.geolocation) {
+                alert("GPS not supported on this device.");
+                return;
+            }
+
+            // Lock in the speed from the input box
+            targetMPH = parseFloat(document.getElementById('speed-input').value) || 30;
+
+            navigator.geolocation.getCurrentPosition((pos) => {
+                startTime = Date.now();
+                lastCoords = pos.coords;
+                totalDistanceMiles = 0;
+                
+                document.getElementById('start-btn').style.display = 'none';
+                inputArea.style.display = 'none';
+                document.getElementById('stop-btn').style.display = 'block';
+                statusEl.innerText = "Tracking @ " + targetMPH + " MPH";
+
+                watchID = navigator.geolocation.watchPosition(updatePosition, 
+                    (err) => console.error("GPS Error: ", err), 
+                    { enableHighAccuracy: true }
+                );
+            });
+        }
+
+        function updatePosition(position) {
+            const now = Date.now();
+            const elapsedSeconds = (now - startTime) / 1000;
+            
+            // Calculate distance since last point
+            const dist = calculateDistance(
+                lastCoords.latitude, lastCoords.longitude,
+                position.coords.latitude, position.coords.longitude
+            );
+            
+            totalDistanceMiles += dist;
+            lastCoords = position.coords;
+
+            // Target Time calculation
+            const targetSeconds = (totalDistanceMiles / targetMPH) * 3600;
+            const delta = (targetSeconds - elapsedSeconds).toFixed(1);
+
+            // UI Update
+            deltaEl.innerText = (delta > 0 ? "+" : "") + delta;
+            
+            if (Math.abs(delta) < 1.5) {
+                deltaEl.className = 'on-pace';
+            } else if (delta < 0) {
+                deltaEl.className = 'too-slow'; // You are behind the ghost
+            } else {
+                deltaEl.className = 'too-fast'; // You are ahead of the ghost
+            }
+
+            distEl.innerText = totalDistanceMiles.toFixed(2) + " mi";
+            speedEl.innerText = (position.coords.speed ? (position.coords.speed * 2.23694).toFixed(1) : "0.0") + " mph";
+        }
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 3958.8; // Miles
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        function stopTracking() {
+            navigator.geolocation.clearWatch(watchID);
+            location.reload(); 
+        }
+    </script>
+</body>
+</html>
