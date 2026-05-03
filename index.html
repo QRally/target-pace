@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ghost Pace v1.3 - Rovanperä Edition</title>
+    <title>Ghost Pace v1.5</title>
     <style>
         body {
-            font-family: -apple-system, system-ui, sans-serif;
+            /* Century/Modern Sans-Serif Stack */
+            font-family: "Inter", "Avenir Next", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: #000;
             color: white;
             display: flex;
@@ -19,123 +20,141 @@
         }
 
         #delta-display {
-            font-size: 9rem;
-            font-weight: 900;
+            font-size: 8rem; /* Large impact */
+            font-weight: 800;
             font-variant-numeric: tabular-nums;
             margin: 0;
             line-height: 1;
         }
 
         .label {
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             text-transform: uppercase;
-            letter-spacing: 2px;
-            color: #666;
+            letter-spacing: 3px; /* Clean, wide spacing */
+            color: #777;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        #setup-ui {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        input {
+            background: #1a1a1a;
+            border: 2px solid #333;
+            color: #fff;
+            font-size: 2.5rem;
+            padding: 15px;
+            border-radius: 15px;
+            width: 160px;
+            text-align: center;
+            font-family: inherit;
+            font-weight: bold;
         }
 
         #stats-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            width: 95%;
-            margin-top: 20px;
+            gap: 12px;
+            width: 92%;
+            margin-top: 25px;
         }
 
         .stat-card {
-            background: #111;
+            background: #121212;
             border: 1px solid #222;
-            padding: 15px 5px;
-            border-radius: 12px;
+            padding: 18px 5px;
+            border-radius: 16px;
             text-align: center;
         }
 
         .stat-value {
             display: block;
             font-size: 1.4rem;
-            font-weight: bold;
-            margin-top: 5px;
+            font-weight: 700;
+            margin-top: 6px;
         }
 
-        .controls { margin-top: 30px; text-align: center; }
-
-        input {
-            background: #111;
-            border: 2px solid #333;
-            color: #4CAF50;
-            font-size: 2rem;
-            padding: 10px;
-            border-radius: 10px;
-            width: 120px;
-            text-align: center;
-        }
+        .controls { margin-top: 40px; }
 
         button {
-            padding: 20px 60px;
-            font-size: 1.5rem;
-            border-radius: 50px;
+            padding: 22px 70px;
+            font-size: 1.6rem;
+            border-radius: 60px;
             border: none;
-            font-weight: bold;
+            font-weight: 800;
             cursor: pointer;
-            margin-top: 20px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
         #start-btn { background: #4CAF50; color: white; }
-        #reset-btn { background: #333; color: #ff4444; display: none; }
+        #reset-btn { background: #222; color: #ff4d4d; display: none; }
         
-        .on-pace { color: #4CAF50; }
-        .too-fast { color: #f44336; } 
-        .too-slow { color: #2196F3; } 
+        /* Color States */
+        .on-pace { color: #fff; } /* Neutral white when on pace */
+        .too-fast { color: #ff3b30; } /* Red */
+        .too-slow { color: #007aff; } /* Rally Blue */
     </style>
 </head>
 <body>
 
     <div id="setup-ui">
-        <div class="label">Target Avg Speed</div>
-        <input type="number" id="speed-input" value="80.7" step="0.1">
-        <div class="label" style="margin-top:10px;">MPH</div>
+        <div class="label">Target MPH</div>
+        <input type="number" id="speed-input" placeholder="0.0" step="0.1" inputmode="decimal">
     </div>
 
-    <div id="delta-display">0.0</div>
-    <div class="label">Seconds Delta</div>
+    <div id="delta-display">0:00</div>
+    <div id="delta-label" class="label">MM:SS Delta</div>
 
     <div id="stats-grid">
         <div class="stat-card">
-            <div class="label">Live</div>
+            <div class="label" style="font-size: 0.7rem;">Live</div>
             <span id="live-speed" class="stat-value">0.0</span>
         </div>
         <div class="stat-card">
-            <div class="label">Avg</div>
+            <div class="label" style="font-size: 0.7rem;">Avg</div>
             <span id="avg-speed" class="stat-value">0.0</span>
         </div>
         <div class="stat-card">
-            <div class="label">Miles</div>
+            <div class="label" style="font-size: 0.7rem;">Miles</div>
             <span id="total-dist" class="stat-value">0.00</span>
         </div>
     </div>
 
     <div class="controls">
-        <button id="start-btn" onclick="init()">START STAGE</button>
-        <button id="reset-btn" onclick="location.reload()">RESET</button>
+        <button id="start-btn" onclick="init()">Start Stage</button>
+        <button id="reset-btn" onclick="location.reload()">Reset</button>
     </div>
 
     <script>
         let watchID, startTime, wakeLock = null;
         let totalMiles = 0, lastCoords = null;
-        let targetMPH = 80.74;
+        let targetMPH = 0;
 
-        // Prevention of screen sleep
         async function requestWakeLock() {
             try {
                 if ('wakeLock' in navigator) {
                     wakeLock = await navigator.wakeLock.request('screen');
                 }
-            } catch (err) {
-                console.error("Wakelock failed:", err.message);
-            }
+            } catch (err) { console.log("Wake Lock disabled"); }
+        }
+
+        function formatTime(totalSeconds) {
+            const sign = totalSeconds >= 0 ? "+" : "-";
+            const absSecs = Math.round(Math.abs(totalSeconds));
+            const mins = Math.floor(absSecs / 60);
+            const secs = absSecs % 60;
+            return `${sign}${mins}:${secs.toString().padStart(2, '0')}`;
         }
 
         function init() {
-            targetMPH = parseFloat(document.getElementById('speed-input').value);
+            const val = document.getElementById('speed-input').value;
+            if(!val || val <= 0) return;
+            
+            targetMPH = parseFloat(val);
             document.getElementById('setup-ui').style.display = 'none';
             document.getElementById('start-btn').style.display = 'none';
             document.getElementById('reset-btn').style.display = 'block';
@@ -145,8 +164,11 @@
             navigator.geolocation.getCurrentPosition(pos => {
                 startTime = Date.now();
                 lastCoords = pos.coords;
-                watchID = navigator.geolocation.watchPosition(update, null, {enableHighAccuracy: true});
-            });
+                watchID = navigator.geolocation.watchPosition(update, null, {
+                    enableHighAccuracy: true,
+                    maximumAge: 0
+                });
+            }, null, {enableHighAccuracy: true});
         }
 
         function update(pos) {
@@ -158,26 +180,25 @@
             totalMiles += d;
             lastCoords = pos.coords;
 
-            // Calculations
             const currentAvg = totalMiles / elapsedHrs;
             const targetSecs = (totalMiles / targetMPH) * 3600;
-            const delta = (targetSecs - elapsedSecs).toFixed(1);
+            const delta = targetSecs - elapsedSecs;
 
-            // UI Updates
             const deltaEl = document.getElementById('delta-display');
-            deltaEl.innerText = (delta > 0 ? "+" : "") + delta;
+            deltaEl.innerText = formatTime(delta);
             
-            if (Math.abs(delta) < 1.0) deltaEl.className = 'on-pace';
+            // Color Logic: Blue if behind ghost, Red if ahead
+            if (Math.abs(delta) < 1.5) deltaEl.className = 'on-pace';
             else if (delta < 0) deltaEl.className = 'too-slow';
             else deltaEl.className = 'too-fast';
 
             document.getElementById('live-speed').innerText = (pos.coords.speed ? (pos.coords.speed * 2.23694).toFixed(1) : "0.0");
-            document.getElementById('avg-speed').innerText = currentAvg.toFixed(1);
+            document.getElementById('avg-speed').innerText = isFinite(currentAvg) ? currentAvg.toFixed(1) : "0.0";
             document.getElementById('total-dist').innerText = totalMiles.toFixed(2);
         }
 
         function calcDist(lat1, lon1, lat2, lon2) {
-            const R = 3958.8; // Earth radius in miles
+            const R = 3958.8; 
             const dLat = (lat2-lat1) * Math.PI/180;
             const dLon = (lon2-lon1) * Math.PI/180;
             const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
